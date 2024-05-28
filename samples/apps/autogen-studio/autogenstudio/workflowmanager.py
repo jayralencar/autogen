@@ -1,6 +1,8 @@
 import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
+from .tools.generate_image import generate_and_save_images
+from .tools.search import search
 
 import autogen
 
@@ -158,12 +160,15 @@ class WorkflowManager:
 
     def sanitize_agent(self, agent: Dict) -> Agent:
         """ """
-
+        # print("AGENT===========================")
+        # print(agent)
+        # print(agent.keys())
+        agent_dict = agent
         skills = agent.get("skills", [])
         agent = Agent.model_validate(agent)
-        agent.config.is_termination_msg = agent.config.is_termination_msg or (
-            lambda x: "TERMINATE" in x.get("content", "").rstrip()[-20:]
-        )
+        # agent.config.is_termination_msg = agent.config.is_termination_msg or (
+        #     lambda x: "TERMINATE" in x.get("content", "").rstrip()[-20:]
+        # )
 
         def get_default_system_message(agent_type: str) -> str:
             if agent_type == "assistant":
@@ -183,7 +188,6 @@ class WorkflowManager:
                 sanitized_llm = sanitize_model(llm)
                 config_list.append(sanitized_llm)
             agent.config.llm_config.config_list = config_list
-
         agent.config.code_execution_config = load_code_execution_config(
             agent.config.code_execution_config, work_dir=self.work_dir
         )
@@ -195,6 +199,18 @@ class WorkflowManager:
                 agent.config.system_message = agent.config.system_message + "\n\n" + skills_prompt
             else:
                 agent.config.system_message = get_default_system_message(agent.type) + "\n\n" + skills_prompt
+            # exec(skills_prompt)
+            # for skill in skills:
+            #     print(type(agent))
+            #     if agent_dict['type'] != "userproxy":
+            #         eval(compile(skill.content, "<string>", "exec"))
+            #         autogen.agentchat.register_function(
+            #             exec(skill.name),
+            #             caller=self.receiver,
+            #             executor=self.sender,
+            #             name=skill.name,
+            #             description=skill.content,
+            #         )
         return agent
 
     def load(self, agent: Any) -> autogen.Agent:
@@ -213,9 +229,13 @@ class WorkflowManager:
             )
 
         linked_agents = agent.get("agents", [])
+        unsanitized_agent = agent
         agent = self.sanitize_agent(agent)
+
         if agent.type == "groupchat":
+            print(linked_agents)
             groupchat_agents = [self.load(agent) for agent in linked_agents]
+            # print(groupchat_agents)
             group_chat_config = self._serialize_agent(agent)
             group_chat_config["agents"] = groupchat_agents
             groupchat = autogen.GroupChat(**group_chat_config)
@@ -232,11 +252,28 @@ class WorkflowManager:
                     **self._serialize_agent(agent),
                     message_processor=self.process_message,
                 )
+                for skill in unsanitized_agent["skills"]:
+                    # eval(compile(skill.content, "<string>", "exec"))
+                    # print(skill.content)
+                    function_name = skill.name
+
+                    print(globals()[function_name])
+                    print(skill.description)
+                    autogen.agentchat.register_function(
+                        globals()[function_name],
+                        caller=agent,
+                        executor=self.sender,
+                        name=skill.name,
+                        description=skill.description,
+                    )
+                    
+                    
             elif agent.type == "userproxy":
                 agent = ExtendedConversableAgent(
                     **self._serialize_agent(agent),
                     message_processor=self.process_message,
                 )
+                # self.userproxy = agent
             else:
                 raise ValueError(f"Unknown agent type: {agent.type}")
             return agent

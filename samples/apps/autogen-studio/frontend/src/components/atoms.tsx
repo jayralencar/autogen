@@ -847,13 +847,20 @@ export const AgentRow = ({ message }: { message: any }) => {
     <GroupView
       title={
         <div className="rounded p-1 px-2 inline-block text-xs bg-secondary">
-          <span className="font-semibold">{message.sender}</span> ( to{" "}
-          {message.recipient} )
+          <span className="font-semibold">{message.sender}</span> to{" "}
+          {message.recipient}
         </div>
       }
       className="m"
     >
-      <MarkdownView data={message.message?.content} className="text-sm" />
+      {message.message?.content ? (
+        <MarkdownView data={message.message.content} className="text-sm" />
+      ) : message.function_call?.name ? (
+        <div className="text-sm">
+          Function Call: {message.function_call.name}
+        </div>
+      ) : null}
     </GroupView>
   );
 };
+
